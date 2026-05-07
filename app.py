@@ -14,45 +14,50 @@ st.set_page_config(
 # ---------------- BACKGROUND IMAGE ---------------- #
 
 def add_bg_from_local(image_file):
+
     with open(image_file, "rb") as image:
-        encoded = base64.b64encode(image.read()).decode()
+
+        encoded = base64.b64encode(
+            image.read()
+        ).decode()
 
     st.markdown(
         f"""
         <style>
+
         .stApp {{
-            background-image: url("data:image/jpg;base64,{encoded}");
+            background-image:
+            linear-gradient(
+                rgba(0,0,0,0.75),
+                rgba(0,0,0,0.75)
+            ),
+            url("data:image/jpg;base64,{encoded}");
+
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
         }}
 
-        /* Dark transparent overlay */
-        .main {{
-            background-color: rgba(0, 0, 0, 0.7);
-            padding: 20px;
-            border-radius: 15px;
-        }}
-
-        /* Make dataframe readable */
         section[data-testid="stSidebar"] {{
-            background-color: rgba(0,0,0,0.8);
+            background-color: rgba(0,0,0,0.85);
         }}
 
         div[data-testid="stDataFrame"] {{
-            background-color: rgba(255,255,255,0.9);
-            border-radius: 10px;
+            background-color: rgba(255,255,255,0.08);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
         }}
 
         h1, h2, h3, h4, h5, h6, p, label, div {{
             color: white;
         }}
+
         </style>
         """,
         unsafe_allow_html=True
     )
 
-# Add background image
+# Add background
 add_bg_from_local("background.jpg")
 
 # ---------------- TITLE ---------------- #
@@ -61,16 +66,17 @@ st.title("🔥 Massive Anime Database")
 
 # ---------------- SETTINGS ---------------- #
 
-TOTAL_PAGES = 200
+TOTAL_PAGES = 500
 ANIME_PER_PAGE = 50
 
 url = "https://graphql.anilist.co"
 
-anime_list = []
+# ---------------- CACHE ---------------- #
 
-# ---------------- FETCH MULTIPLE PAGES ---------------- #
+@st.cache_data(show_spinner=False)
+def fetch_anime_data():
 
-with st.spinner("Fetching anime database..."):
+    anime_list = []
 
     for page in range(1, TOTAL_PAGES + 1):
 
@@ -78,7 +84,9 @@ with st.spinner("Fetching anime database..."):
         {{
           Page(page: {page}, perPage: {ANIME_PER_PAGE}) {{
 
-            media(type: ANIME, sort: POPULARITY_DESC) {{
+            media(type: ANIME, sort: ID) {{
+
+              id
 
               title {{
                 romaji
@@ -101,7 +109,7 @@ with st.spinner("Fetching anime database..."):
             response = requests.post(
                 url,
                 json={"query": query},
-                timeout=10
+                timeout=15
             )
 
             data = response.json()
@@ -116,11 +124,26 @@ with st.spinner("Fetching anime database..."):
 
             for anime in media:
 
+                if anime is None:
+                    continue
+
+                title_data = anime.get("title")
+
+                if not title_data:
+                    continue
+
+                title = title_data.get("romaji")
+
+                if not title:
+                    continue
+
                 score = anime.get("averageScore")
 
                 anime_list.append({
 
-                    "Title": anime["title"]["romaji"],
+                    "ID": anime.get("id"),
+
+                    "Title": title,
 
                     "Score": round(score / 10, 1)
                     if score else "N/A",
@@ -128,50 +151,69 @@ with st.spinner("Fetching anime database..."):
                     "Episodes": anime.get("episodes")
                     or "Ongoing",
 
-                    "Poster": anime["coverImage"]["large"]
+                    "Poster": anime.get(
+                        "coverImage", {}
+                    ).get(
+                        "large"
+                    )
                 })
 
         except:
             pass
+
+    return anime_list
+
+# ---------------- FETCH DATA ---------------- #
+
+with st.spinner("Fetching massive anime database..."):
+
+    anime_list = fetch_anime_data()
 
 # ---------------- DATAFRAME ---------------- #
 
 df = pd.DataFrame(anime_list)
 
 # Remove duplicates
-df = df.drop_duplicates(subset=["Title"])
+df = df.drop_duplicates(subset=["ID"])
 
 # Reset index
 df.reset_index(drop=True, inplace=True)
 
-# ---------------- TABLE ---------------- #
+# ---------------- SIDEBAR ---------------- #
 
-st.subheader(f"📊 Total Anime Loaded: {len(df)}")
+st.sidebar.header("🔍 Search Anime")
 
-st.dataframe(
-    df[["Title", "Score", "Episodes"]],
-    use_container_width=True,
-    height=700
+search = st.sidebar.text_input(
+    "Search by title"
 )
 
-# ---------------- SEARCH ---------------- #
+# ---------------- SEARCH FILTER ---------------- #
 
-search = st.text_input("🔍 Search Anime")
+filtered_df = df.copy()
 
 if search:
 
-    filtered_df = df[
-        df["Title"].str.contains(
+    filtered_df = filtered_df[
+        filtered_df["Title"].str.contains(
             search,
             case=False,
             na=False
         )
     ]
 
-    st.dataframe(
-        filtered_df,
-        use_container_width=True
-    )
+# ---------------- TABLE ---------------- #
+
+st.subheader(
+    f"📊 Total Anime Loaded: {len(filtered_df)}"
+)
+
+st.dataframe(
+    filtered_df[
+        ["Title", "Score", "Episodes"]
+    ],
+    use_container_width=True,
+    height=700
+)
 
 # ---------------- POSTERS ---------------- #
 
@@ -179,14 +221,26 @@ st.subheader("🔥 Anime Gallery")
 
 cols = st.columns(5)
 
-for i, anime in enumerate(anime_list[:50]):
+gallery_data = filtered_df.head(50)
+
+for i, (_, anime) in enumerate(
+    gallery_data.iterrows()
+):
 
     with cols[i % 5]:
 
-        st.image(anime["Poster"])
+        if anime["Poster"]:
 
-        st.markdown(f"### {anime['Title']}")
+            st.image(anime["Poster"])
 
-        st.write(f"⭐ Score: {anime['Score']}")
+        st.markdown(
+            f"### {anime['Title']}"
+        )
 
-        st.write(f"🎬 Episodes: {anime['Episodes']}")
+        st.write(
+            f"⭐ Score: {anime['Score']}"
+        )
+
+        st.write(
+            f"🎬 Episodes: {anime['Episodes']}"
+        )
