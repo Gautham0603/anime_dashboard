@@ -2,7 +2,8 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# Page config
+# ---------------- PAGE CONFIG ---------------- #
+
 st.set_page_config(
     page_title="Anime Dashboard",
     page_icon="🔥",
@@ -11,19 +12,23 @@ st.set_page_config(
 
 st.title("🔥 Dynamic Anime Dashboard")
 
-# AniList API
+# ---------------- API ---------------- #
+
 url = "https://graphql.anilist.co"
 
-# Query
 query = """
 {
-  Page(page: 200, perPage: 50) {
+  Page(page: 1, perPage: 50) {
     media(type: ANIME, sort: POPULARITY_DESC) {
+
       title {
         romaji
       }
+
       averageScore
+
       episodes
+
       coverImage {
         large
       }
@@ -32,48 +37,53 @@ query = """
 }
 """
 
-# Request
-response = requests.post(
-    url,
-    json={"query": query}
-)
+# ---------------- REQUEST ---------------- #
 
-# JSON response
-data = response.json()
+try:
 
-anime_list = []
+    response = requests.post(
+        url,
+        json={"query": query},
+        timeout=10
+    )
 
-# Safe API check
-if (
-    "data" in data and
-    data["data"] and
-    "Page" in data["data"] and
-    "media" in data["data"]["Page"]
-):
+    data = response.json()
 
-    for anime in data["data"]["Page"]["media"]:
+    # Safe extraction
+    media = data.get("data", {}).get("Page", {}).get("media", [])
 
-        score = anime["averageScore"]
+    anime_list = []
+
+    # ---------------- DATA EXTRACTION ---------------- #
+
+    for anime in media:
+
+        score = anime.get("averageScore")
 
         anime_list.append({
+
             "Title": anime["title"]["romaji"],
-            "Score": score / 10 if score else "N/A",
-            "Episodes": anime["episodes"] or "Ongoing",
+
+            "Score": round(score / 10, 1) if score else "N/A",
+
+            "Episodes": anime.get("episodes") or "Ongoing",
+
             "Poster": anime["coverImage"]["large"]
         })
 
-    # DataFrame
+    # ---------------- DATAFRAME ---------------- #
+
     df = pd.DataFrame(anime_list)
 
-    # Table
-    st.subheader("Anime Data")
+    st.subheader("📊 Anime Data")
 
     st.dataframe(
         df[["Title", "Score", "Episodes"]],
         use_container_width=True
     )
 
-    # Posters
+    # ---------------- POSTERS ---------------- #
+
     st.subheader("🔥 Top Anime")
 
     cols = st.columns(5)
@@ -90,7 +100,10 @@ if (
 
             st.write(f"🎬 Episodes: {anime['Episodes']}")
 
-else:
+# ---------------- ERROR HANDLING ---------------- #
 
-    st.error("Failed to fetch anime data.")
-    st.write(data)
+except Exception as e:
+
+    st.error("Failed to fetch anime data from AniList API.")
+
+    st.write(e)
