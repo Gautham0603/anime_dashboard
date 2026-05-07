@@ -17,7 +17,7 @@ url = "https://graphql.anilist.co"
 # Query
 query = """
 {
-  Page(page: 400, perPage: 100) {
+  Page(page: 1, perPage: 50) {
     media(type: ANIME, sort: POPULARITY_DESC) {
       title {
         romaji
@@ -38,46 +38,59 @@ response = requests.post(
     json={"query": query}
 )
 
-# Convert to JSON
+# JSON response
 data = response.json()
 
-# Anime list
 anime_list = []
 
-# Extract data
-for anime in data["data"]["Page"]["media"]:
+# Safe API check
+if (
+    "data" in data and
+    data["data"] and
+    "Page" in data["data"] and
+    "media" in data["data"]["Page"]
+):
 
-    anime_list.append({
-        "Title": anime["title"]["romaji"],
-        "Score": anime["averageScore"]/10,
-        "Episodes": anime["episodes"],
-        "Poster": anime["coverImage"]["large"]
-    })
+    for anime in data["data"]["Page"]["media"]:
 
-# DataFrame
-df = pd.DataFrame(anime_list)
+        score = anime["averageScore"]
 
-# Show dataframe
-st.subheader("Anime Data")
+        anime_list.append({
+            "Title": anime["title"]["romaji"],
+            "Score": score / 10 if score else "N/A",
+            "Episodes": anime["episodes"] or "Ongoing",
+            "Poster": anime["coverImage"]["large"]
+        })
 
-st.dataframe(
-    df[["Title", "Score", "Episodes"]],
-    use_container_width=True
-)
+    # DataFrame
+    df = pd.DataFrame(anime_list)
 
-# Posters section
-st.subheader("🔥 Top Anime")
+    # Table
+    st.subheader("Anime Data")
 
-cols = st.columns(5)
+    st.dataframe(
+        df[["Title", "Score", "Episodes"]],
+        use_container_width=True
+    )
 
-for i, anime in enumerate(anime_list):
+    # Posters
+    st.subheader("🔥 Top Anime")
 
-    with cols[i % 5]:
+    cols = st.columns(5)
 
-        st.image(anime["Poster"])
+    for i, anime in enumerate(anime_list):
 
-        st.markdown(f"### {anime['Title']}")
+        with cols[i % 5]:
 
-        st.write(f"⭐ Score: {anime['Score']/10}")
+            st.image(anime["Poster"])
 
-        st.write(f"🎬 Episodes: {anime['Episodes']}")
+            st.markdown(f"### {anime['Title']}")
+
+            st.write(f"⭐ Score: {anime['Score']}")
+
+            st.write(f"🎬 Episodes: {anime['Episodes']}")
+
+else:
+
+    st.error("Failed to fetch anime data.")
+    st.write(data)
