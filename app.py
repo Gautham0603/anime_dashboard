@@ -75,7 +75,6 @@ url = "https://graphql.anilist.co"
 # ---------------- CACHE ---------------- #
 
 @st.cache_data(show_spinner=False)
-
 def fetch_anime_data():
 
     anime_list = []
@@ -129,17 +128,24 @@ def fetch_anime_data():
                 if not anime:
                     continue
 
-                title_data = anime.get("title")
+                # Safe title
+                try:
+                    title = anime["title"]["romaji"]
+                except:
+                    title = "Unknown"
 
-                if not title_data:
-                    continue
-
-                title = title_data.get("romaji")
-
-                if not title:
-                    continue
-
+                # Safe score
                 score = anime.get("averageScore")
+
+                # Safe episodes
+                episodes = anime.get("episodes")
+
+                # Safe poster
+                poster = anime.get(
+                    "coverImage", {}
+                ).get(
+                    "large"
+                )
 
                 anime_list.append({
 
@@ -150,14 +156,10 @@ def fetch_anime_data():
                     "Score": round(score / 10, 1)
                     if score else "N/A",
 
-                    "Episodes": anime.get("episodes")
-                    or "Ongoing",
+                    "Episodes": episodes
+                    if episodes else "Ongoing",
 
-                    "Poster": anime.get(
-                        "coverImage", {}
-                    ).get(
-                        "large"
-                    )
+                    "Poster": poster
                 })
 
         except:
