@@ -12,29 +12,44 @@ st.set_page_config(
 
 st.title("🔥 Dynamic Anime Dashboard")
 
+# ---------------- SIDEBAR ---------------- #
+
+st.sidebar.header("Anime Controls")
+
+page_number = st.sidebar.slider(
+    "Select Anime Page",
+    min_value=1,
+    max_value=200,
+    value=1
+)
+
+# 200 pages × 50 anime ≈ 10,000 anime
+anime_per_page = 50
+
 # ---------------- API ---------------- #
 
 url = "https://graphql.anilist.co"
 
-query = """
-{
-  Page(page: 1, perPage: 50) {
-    media(type: ANIME, sort: POPULARITY_DESC) {
+query = f"""
+{{
+  Page(page: {page_number}, perPage: {anime_per_page}) {{
 
-      title {
+    media(type: ANIME, sort: POPULARITY_DESC) {{
+
+      title {{
         romaji
-      }
+      }}
 
       averageScore
 
       episodes
 
-      coverImage {
+      coverImage {{
         large
-      }
-    }
-  }
-}
+      }}
+    }}
+  }}
+}}
 """
 
 # ---------------- REQUEST ---------------- #
@@ -44,7 +59,7 @@ try:
     response = requests.post(
         url,
         json={"query": query},
-        timeout=10
+        timeout=15
     )
 
     data = response.json()
@@ -75,7 +90,7 @@ try:
 
     df = pd.DataFrame(anime_list)
 
-    st.subheader("📊 Anime Data")
+    st.subheader(f"📊 Anime Data — Page {page_number}")
 
     st.dataframe(
         df[["Title", "Score", "Episodes"]],
@@ -84,7 +99,7 @@ try:
 
     # ---------------- POSTERS ---------------- #
 
-    st.subheader("🔥 Top Anime")
+    st.subheader("🔥 Anime Gallery")
 
     cols = st.columns(5)
 
