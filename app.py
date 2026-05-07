@@ -10,115 +10,136 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🔥 Dynamic Anime Dashboard")
+st.title("🔥 Massive Anime Database")
 
-# ---------------- SIDEBAR ---------------- #
+# ---------------- SETTINGS ---------------- #
 
-st.sidebar.header("Anime Controls")
-
-page_number = st.sidebar.slider(
-    "Select Anime Page",
-    min_value=1,
-    max_value=200,
-    value=1
-)
-
-# 200 pages × 50 anime ≈ 10,000 anime
-anime_per_page = 50
-
-# ---------------- API ---------------- #
+TOTAL_PAGES = 200
+ANIME_PER_PAGE = 50
 
 url = "https://graphql.anilist.co"
 
-query = f"""
-{{
-  Page(page: {page_number}, perPage: {anime_per_page}) {{
+anime_list = []
 
-    media(type: ANIME, sort: POPULARITY_DESC) {{
+# ---------------- FETCH MULTIPLE PAGES ---------------- #
 
-      title {{
-        romaji
-      }}
+with st.spinner("Fetching anime database..."):
 
-      averageScore
+    for page in range(1, TOTAL_PAGES + 1):
 
-      episodes
+        query = f"""
+        {{
+          Page(page: {page}, perPage: {ANIME_PER_PAGE}) {{
 
-      coverImage {{
-        large
-      }}
-    }}
-  }}
-}}
-"""
+            media(type: ANIME, sort: POPULARITY_DESC) {{
 
-# ---------------- REQUEST ---------------- #
+              title {{
+                romaji
+              }}
 
-try:
+              averageScore
 
-    response = requests.post(
-        url,
-        json={"query": query},
-        timeout=15
-    )
+              episodes
 
-    data = response.json()
+              coverImage {{
+                large
+              }}
+            }}
+          }}
+        }}
+        """
 
-    # Safe extraction
-    media = data.get("data", {}).get("Page", {}).get("media", [])
+        try:
 
-    anime_list = []
+            response = requests.post(
+                url,
+                json={"query": query},
+                timeout=10
+            )
 
-    # ---------------- DATA EXTRACTION ---------------- #
+            data = response.json()
 
-    for anime in media:
+            media = data.get(
+                "data", {}
+            ).get(
+                "Page", {}
+            ).get(
+                "media", []
+            )
 
-        score = anime.get("averageScore")
+            for anime in media:
 
-        anime_list.append({
+                score = anime.get("averageScore")
 
-            "Title": anime["title"]["romaji"],
+                anime_list.append({
 
-            "Score": round(score / 10, 1) if score else "N/A",
+                    "Title": anime["title"]["romaji"],
 
-            "Episodes": anime.get("episodes") or "Ongoing",
+                    "Score": round(score / 10, 1)
+                    if score else "N/A",
 
-            "Poster": anime["coverImage"]["large"]
-        })
+                    "Episodes": anime.get("episodes")
+                    or "Ongoing",
 
-    # ---------------- DATAFRAME ---------------- #
+                    "Poster": anime["coverImage"]["large"]
+                })
 
-    df = pd.DataFrame(anime_list)
+        except:
+            pass
 
-    st.subheader(f"📊 Anime Data — Page {page_number}")
+# ---------------- DATAFRAME ---------------- #
+
+df = pd.DataFrame(anime_list)
+
+# Remove duplicates
+df = df.drop_duplicates(subset=["Title"])
+
+# Reset index
+df.reset_index(drop=True, inplace=True)
+
+# ---------------- TABLE ---------------- #
+
+st.subheader(f"📊 Total Anime Loaded: {len(df)}")
+
+st.dataframe(
+    df[["Title", "Score", "Episodes"]],
+    use_container_width=True,
+    height=700
+)
+
+# ---------------- SEARCH ---------------- #
+
+search = st.text_input("🔍 Search Anime")
+
+if search:
+
+    filtered_df = df[
+        df["Title"].str.contains(
+            search,
+            case=False,
+            na=False
+        )
+    ]
 
     st.dataframe(
-        df[["Title", "Score", "Episodes"]],
+        filtered_df,
         use_container_width=True
     )
 
-    # ---------------- POSTERS ---------------- #
+# ---------------- POSTERS ---------------- #
 
-    st.subheader("🔥 Anime Gallery")
+st.subheader("🔥 Anime Gallery")
 
-    cols = st.columns(5)
+cols = st.columns(5)
 
-    for i, anime in enumerate(anime_list):
+for i, anime in enumerate(anime_list[:50]):
 
-        with cols[i % 5]:
+    with cols[i % 5]:
 
-            st.image(anime["Poster"])
+        st.image(anime["Poster"])
 
-            st.markdown(f"### {anime['Title']}")
+        st.markdown(f"### {anime['Title']}")
 
-            st.write(f"⭐ Score: {anime['Score']}")
+        st.write(f"⭐ Score: {anime['Score']}")
 
-            st.write(f"🎬 Episodes: {anime['Episodes']}")
-
-# ---------------- ERROR HANDLING ---------------- #
-
-except Exception as e:
-
-    st.error("Failed to fetch anime data from AniList API.")
-
-    st.write(e)
+        st.write(f"🎬 Episodes: {anime['Episodes']}")
