@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import base64
 
 # ---------------- PAGE CONFIG ---------------- #
 
@@ -9,6 +10,52 @@ st.set_page_config(
     page_icon="🔥",
     layout="wide"
 )
+
+# ---------------- BACKGROUND IMAGE ---------------- #
+
+def add_bg_from_local(image_file):
+    with open(image_file, "rb") as image:
+        encoded = base64.b64encode(image.read()).decode()
+
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/jpg;base64,{encoded}");
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }}
+
+        /* Dark transparent overlay */
+        .main {{
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 15px;
+        }}
+
+        /* Make dataframe readable */
+        section[data-testid="stSidebar"] {{
+            background-color: rgba(0,0,0,0.8);
+        }}
+
+        div[data-testid="stDataFrame"] {{
+            background-color: rgba(255,255,255,0.9);
+            border-radius: 10px;
+        }}
+
+        h1, h2, h3, h4, h5, h6, p, label, div {{
+            color: white;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Add background image
+add_bg_from_local("background.jpg")
+
+# ---------------- TITLE ---------------- #
 
 st.title("🔥 Massive Anime Database")
 
