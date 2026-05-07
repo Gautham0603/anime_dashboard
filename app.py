@@ -6,7 +6,7 @@ import base64
 # ---------------- PAGE CONFIG ---------------- #
 
 st.set_page_config(
-    page_title="Anime Dashboard",
+    page_title="Anime Genre Dashboard",
     page_icon="🔥",
     layout="wide"
 )
@@ -58,209 +58,208 @@ def add_bg_from_local(image_file):
         unsafe_allow_html=True
     )
 
-# Add background image
+# Add background
 add_bg_from_local("background.jpg")
 
 # ---------------- TITLE ---------------- #
 
-st.title("🔥 Massive Anime Database")
+st.title("🔥 Anime Genre Dashboard")
 
-# ---------------- SETTINGS ---------------- #
+# ---------------- SIDEBAR ---------------- #
 
-TOTAL_PAGES = 50
-ANIME_PER_PAGE = 50
+st.sidebar.header("🎴 Anime Filters")
+
+genres = [
+    "Action",
+    "Adventure",
+    "Comedy",
+    "Drama",
+    "Fantasy",
+    "Horror",
+    "Romance",
+    "Sci-Fi",
+    "Sports",
+    "Slice of Life",
+    "Mystery",
+    "Psychological"
+]
+
+selected_genre = st.sidebar.selectbox(
+    "Select Genre",
+    genres
+)
+
+search = st.sidebar.text_input(
+    "🔍 Search Anime"
+)
+
+min_score = st.sidebar.slider(
+    "⭐ Minimum Score",
+    0.0,
+    10.0,
+    7.0
+)
+
+# ---------------- API ---------------- #
 
 url = "https://graphql.anilist.co"
 
-# ---------------- CACHE ---------------- #
+query = f"""
+{{
+  Page(page: 1, perPage: 50) {{
 
-@st.cache_data(show_spinner=False)
-def fetch_anime_data():
+    media(
+      type: ANIME,
+      genre: "{selected_genre}",
+      sort: POPULARITY_DESC
+    ) {{
 
-    anime_list = []
+      title {{
+        romaji
+      }}
 
-    for page in range(1, TOTAL_PAGES + 1):
+      averageScore
 
-        query = f"""
-        {{
-          Page(page: {page}, perPage: {ANIME_PER_PAGE}) {{
+      episodes
 
-            media(type: ANIME, sort: ID) {{
-
-              id
-
-              title {{
-                romaji
-              }}
-
-              averageScore
-
-              episodes
-
-              coverImage {{
-                large
-              }}
-            }}
-          }}
-        }}
-        """
-
-        try:
-
-            response = requests.post(
-                url,
-                json={"query": query},
-                timeout=10
-            )
-
-            data = response.json()
-
-            media = data.get(
-                "data", {}
-            ).get(
-                "Page", {}
-            ).get(
-                "media", []
-            )
-
-            for anime in media:
-
-                if not anime:
-                    continue
-
-                # Safe title
-                try:
-                    title = anime["title"]["romaji"]
-                except:
-                    title = "Unknown"
-
-                # Safe score
-                score = anime.get("averageScore")
-
-                # Safe episodes
-                episodes = anime.get("episodes")
-
-                # Safe poster
-                poster = anime.get(
-                    "coverImage", {}
-                ).get(
-                    "large"
-                )
-
-                anime_list.append({
-
-                    "ID": anime.get("id"),
-
-                    "Title": title,
-
-                    "Score": round(score / 10, 1)
-                    if score else "N/A",
-
-                    "Episodes": episodes
-                    if episodes else "Ongoing",
-
-                    "Poster": poster
-                })
-
-        except:
-            pass
-
-    return anime_list
+      coverImage {{
+        large
+      }}
+    }}
+  }}
+}}
+"""
 
 # ---------------- FETCH DATA ---------------- #
 
-with st.spinner("Fetching anime database..."):
+@st.cache_data(show_spinner=False)
 
-    anime_list = fetch_anime_data()
+def fetch_anime_data(query):
+
+    response = requests.post(
+        url,
+        json={"query": query},
+        timeout=10
+    )
+
+    data = response.json()
+
+    media = data.get(
+        "data", {}
+    ).get(
+        "Page", {}
+    ).get(
+        "media", []
+    )
+
+    anime_list = []
+
+    for anime in media:
+
+        if not anime:
+            continue
+
+        title = anime["title"]["romaji"]
+
+        score = anime.get("averageScore")
+
+        anime_list.append({
+
+            "Title": title,
+
+            "Score": round(score / 10, 1)
+            if score else "N/A",
+
+            "Episodes": anime.get("episodes")
+            or "Ongoing",
+
+            "Poster": anime.get(
+                "coverImage", {}
+            ).get(
+                "large"
+            )
+        })
+
+    return anime_list
+
+# Load anime
+anime_list = fetch_anime_data(query)
 
 # ---------------- DATAFRAME ---------------- #
 
 df = pd.DataFrame(anime_list)
 
-# Remove duplicates
+# ---------------- FILTERS ---------------- #
+
 if not df.empty:
 
-    df = df.drop_duplicates(
-        subset=["ID"]
-    )
+    # Search filter
+    if search:
 
-    df.reset_index(
-        drop=True,
-        inplace=True
-    )
+        df = df[
+            df["Title"].str.contains(
+                search,
+                case=False,
+                na=False
+            )
+        ]
 
-# ---------------- SIDEBAR ---------------- #
-
-st.sidebar.header("🔍 Anime Search")
-
-search = st.sidebar.text_input(
-    "Search Anime"
-)
-
-# ---------------- FILTER ---------------- #
-
-filtered_df = df.copy()
-
-if search and not filtered_df.empty:
-
-    filtered_df = filtered_df[
-        filtered_df["Title"].str.contains(
-            search,
-            case=False,
-            na=False
-        )
+    # Score filter
+    df = df[
+        pd.to_numeric(
+            df["Score"],
+            errors="coerce"
+        ) >= min_score
     ]
 
 # ---------------- TABLE ---------------- #
 
-if not filtered_df.empty:
+st.subheader(
+    f"📊 {selected_genre} Anime"
+)
 
-    st.subheader(
-        f"📊 Total Anime Loaded: {len(filtered_df)}"
-    )
+if not df.empty:
 
     st.dataframe(
-        filtered_df[
+        df[
             ["Title", "Score", "Episodes"]
         ],
         use_container_width=True,
-        height=700
+        height=600
     )
 
 else:
 
-    st.warning("No anime data loaded.")
+    st.warning(
+        "No anime found."
+    )
 
 # ---------------- GALLERY ---------------- #
 
-if not filtered_df.empty:
+st.subheader("🔥 Anime Gallery")
 
-    st.subheader("🔥 Anime Gallery")
+cols = st.columns(5)
 
-    cols = st.columns(5)
+for i, (_, anime) in enumerate(
+    df.head(25).iterrows()
+):
 
-    gallery_df = filtered_df.head(50)
+    with cols[i % 5]:
 
-    for i, (_, anime) in enumerate(
-        gallery_df.iterrows()
-    ):
+        if anime["Poster"]:
 
-        with cols[i % 5]:
-
-            if anime["Poster"]:
-
-                st.image(
-                    anime["Poster"]
-                )
-
-            st.markdown(
-                f"### {anime['Title']}"
+            st.image(
+                anime["Poster"]
             )
 
-            st.write(
-                f"⭐ Score: {anime['Score']}"
-            )
+        st.markdown(
+            f"### {anime['Title']}"
+        )
 
-            st.write(
-                f"🎬 Episodes: {anime['Episodes']}"
-            )
+        st.write(
+            f"⭐ Score: {anime['Score']}"
+        )
+
+        st.write(
+            f"🎬 Episodes: {anime['Episodes']}"
+        )
