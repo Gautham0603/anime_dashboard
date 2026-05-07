@@ -17,7 +17,7 @@ url = "https://graphql.anilist.co"
 # Query
 query = """
 {
-  Page(page: 200, perPage: 100) {
+  Page(page: 200, perPage: 50) {
     media(type: ANIME, sort: POPULARITY_DESC) {
       title {
         romaji
